@@ -32,7 +32,6 @@ import moa.classifiers.lazy.neighboursearch.LinearNNSearch;
 import moa.classifiers.lazy.neighboursearch.NearestNeighbourSearch;
 import moa.core.Measurement;
 
-import java.awt.*;
 import java.util.Arrays;
 
 /**
@@ -49,10 +48,11 @@ public class kNNwithCentroid extends AbstractClassifier implements MultiClassCla
 
     private static final long serialVersionUID = 1L;
 
-	public IntOption kOption = new IntOption( "k", 'k', "The number of neighbors", 10, 1, Integer.MAX_VALUE);
+	public IntOption kOption = new IntOption( "k", 'k', "The number of neighbors", 1, 1, 1);
 
 	// For checking regression with mean value or median value
 	public FlagOption medianOption = new FlagOption("median",'m',"median or mean");
+	public FlagOption debugFlag = new FlagOption("debug",'d',"Debug");
 
 	public IntOption limitOption = new IntOption( "limit", 'w', "The maximum number of instances to store", 1000, 1, Integer.MAX_VALUE);
 
@@ -73,8 +73,8 @@ public class kNNwithCentroid extends AbstractClassifier implements MultiClassCla
 
     protected Instances window;
 	protected Instances centroids;
-	protected double[][] sums;
-	protected int[] counters;
+	protected double[][] attrSums;
+	protected int[] classCounters;
 
 	@Override
 	public void setModelContext(InstancesHeader context) {
@@ -83,8 +83,8 @@ public class kNNwithCentroid extends AbstractClassifier implements MultiClassCla
 			this.window.setClassIndex(context.classIndex());
 			this.centroids = new Instances(context,0);
 			this.centroids.setClassIndex(context.classIndex());
-			this.sums = new double[2][context.numAttributes()];
-			this.counters = new int[2];
+			this.attrSums = new double[2][context.numAttributes()];
+			this.classCounters = new int[2];
 		} catch(Exception e) {
 			System.err.println("Error: no Model Context available.");
 			e.printStackTrace();
@@ -102,62 +102,62 @@ public class kNNwithCentroid extends AbstractClassifier implements MultiClassCla
     public void trainOnInstanceImpl(Instance inst) {
 		if (inst.classValue() > C)
 			C = (int)inst.classValue();
+
+		// Creating the different arrays and instances, if they aren't created already
 		if (this.window == null) {
 			this.window = new Instances(inst.dataset());
 			this.centroids = new Instances(inst.dataset());
-			this.sums = new double[2][inst.numAttributes()];
-			this.counters = new int[2];
+			this.attrSums = new double[2][inst.numAttributes()];
+			this.classCounters = new int[2];
 		}
+
+		// Adding the very first instance to both classes
+		// they are a nothing instance so that they do not have any sway on the classification
 		if (this.centroids.size() == 0){
-			DenseInstance dummy = new DenseInstance(inst);
-			for (int attId = 0; attId < dummy.numAttributes(); attId++){
-				dummy.setValue(attId, 0);
+			DenseInstance initialInst = new DenseInstance(inst);
+			for (int attr = 0; attr < initialInst.numAttributes(); attr++){
+				initialInst.setValue(attr, 0);
 			}
-			this.centroids.add(dummy);
-			dummy.setClassValue(1);
-			this.centroids.add(dummy);
+			this.centroids.add(initialInst);
+			initialInst.setClassValue(1);
+			this.centroids.add(initialInst);
 		}
-		if (this.limitOption.getValue() <= this.window.numInstances()) {
-			Instance removeInst = this.window.get(0);
-//			if(DEBUG)
-//				System.out.println("\n\n-----\nREMOVING\n" + removeInst);
+
+		// Removing the oldest instance in the window
+		if (this.window.numInstances() >= this.limitOption.getValue()) {
+			Instance removedInst = this.window.get(0);
+
+			if (debugFlag.isSet()) System.out.println("window size before deletion: " + window.size());
 			this.window.delete(0);
+			if (debugFlag.isSet()) System.out.println("window size after deletion: " + window.size());
 			// Remove the counters and sum
-			int removeClassValue = (int)removeInst.classValue();
-			Instance removeCentInst = this.centroids.get(removeClassValue);
-//			if(DEBUG) {
-//				System.out.println("classVal: " + Arrays.toString(this.sums[removeClassValue]));
-//				System.out.println("centroid for removal before: " + removeCentInst);
-//			}
-			for (int attId = 0; attId < inst.numAttributes(); attId++) {
-				this.sums[removeClassValue][attId] -= removeInst.value(attId);
-				removeCentInst.setValue(attId, this.sums[removeClassValue][attId]);
+			int removedClassVal = (int)removedInst.classValue();
+			Instance removedCentInst = this.centroids.get(removedClassVal);
+
+			this.classCounters[removedClassVal]--;
+
+			for (int attr = 0; attr < inst.numAttributes(); attr++) {
+				this.attrSums[removedClassVal][attr] -= removedInst.value(attr);
+				removedCentInst.setValue(attr, this.attrSums[removedClassVal][attr]);
 			}
-//			if (DEBUG) {
-//				System.out.println("sums after: " + Arrays.toString(this.sums[removeClassValue]));
-//				System.out.println("centroid for removal after: " + removeCentInst);
-//			}
 		}
+
+		// Adding the instance to the appropriate centroid
+		if (debugFlag.isSet()) System.out.println("Adding a new inst of class " + inst.classValue());
 		this.window.add(inst);
+		if (debugFlag.isSet()) System.out.println("window size after adding: " + window.size());
 		int classVal = (int)inst.classValue();
 		// add counter
-		counters[classVal]++;
+		classCounters[classVal]++;
+		if (debugFlag.isSet()) System.out.println("Class 0 count: " + classCounters[0] + "	Class 1 count: " + classCounters[1]);
 		// add to sum and update the centroid
-//		if (DEBUG) {
-//			System.out.println("\n\n-----\nclassVal: " + classVal);
-//			System.out.println("instance: " + inst);
-//		}
 		Instance centInst = this.centroids.get(classVal);
-//		if (DEBUG)
-//			System.out.println("centroid instance: " + centInst);
-		for (int attId = 0; attId < inst.numAttributes(); attId++) {
-			sums[classVal][attId] = sums[classVal][attId] + inst.value(attId);
-			centInst.setValue(attId, sums[classVal][attId] / counters[classVal]);
+		// Adding the instance, and all the attributes, to the sums array
+		// Then recalculating the centroid
+		for (int attr = 0; attr < inst.numAttributes(); attr++) {
+			attrSums[classVal][attr] = attrSums[classVal][attr] + inst.value(attr);
+			centInst.setValue(attr, attrSums[classVal][attr] / classCounters[classVal]);
 		}
-//		if (DEBUG) {
-//			System.out.println("sums: " + Arrays.toString(sums[classVal]));
-//			System.out.println("centroid: " + centInst + "\n centroid this: " + this.centroids.get(classVal));
-//		}
     }
 
 	@Override
@@ -171,54 +171,14 @@ public class kNNwithCentroid extends AbstractClassifier implements MultiClassCla
 				search = new KDTree();
 				search.setInstances(this.centroids);
 			}	
-			if (this.window.numInstances()>0) {	
+			if (this.centroids.numInstances()>0) {
 				Instances neighbours = search.kNearestNeighbours(inst,Math.min(kOption.getValue(),this.centroids.numInstances()));
-				//================== Regression ====================
-				if(inst.classAttribute().isNumeric()){
-					double[] result = new double[1];
-					// For storing the sum of class values of all the k nearest neighbours
-					double sum = 0;
-					// For storing the number of the nearest neighbours
-					int num = neighbours.numInstances();
-					//================== Median ====================
-					if(medianOption.isSet()){
-						// For storing every neighbour's class value
-						double[] classValues = new double[num];
 
-						for(int i=0;i<num;i++){
-							classValues[i] = neighbours.instance(i).classValue();
-						}
-						// Sort the class values
-						Arrays.sort(classValues);
-						// Assign the median value into result
-						if(classValues.length%2==1){
-							result[0] = classValues[num/2];
-						}else{
-							result[0] = (classValues[num/2 - 1] + classValues[num/2]) / 2;
-						}
-						return result;
-						//=============== End of Median ============
-					}else{
-						//================== Mean ==================
-						for(int i=0;i<num;i++){
-							sum += neighbours.instance(i).classValue();
-						}
-						// Calculate the mean of all k nearest neighbours' class values
-						result[0] = sum / num;
-						return result;
-						//=============== End of Mean ==============
-					}
-					//============= End of Regression ==============
-				}else{
-					for (int i = 0; i < neighbours.numInstances(); i++) {
-						v[(int) neighbours.instance(i).classValue()]++;
-					}
+				for (int i = 0; i < neighbours.numInstances(); i++) {
+					v[(int) neighbours.instance(i).classValue()]++;
 				}
 			}
 		} catch(Exception e) {
-			//System.err.println("Error: kNN search failed.");
-			//e.printStackTrace();
-			//System.exit(1);
 			return new double[inst.numClasses()];
 		}
 		return v;
