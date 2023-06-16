@@ -22,8 +22,6 @@ package moa.classifiers.meta;
 import com.github.javacliparser.IntOption;
 import com.yahoo.labs.samoa.instances.Instance;
 import moa.capabilities.CapabilitiesHandler;
-import moa.capabilities.Capability;
-import moa.capabilities.ImmutableCapabilities;
 import moa.classifiers.AbstractClassifier;
 import moa.classifiers.Classifier;
 import moa.classifiers.MultiClassClassifier;
@@ -55,9 +53,20 @@ import moa.options.ClassOption;
 public class TheEnsemble extends AbstractClassifier implements MultiClassClassifier,
                                                           CapabilitiesHandler {
 
+    private int numLearners = 10;
+
+    private int windowSize = 1000;
+    private int windowCount = 0;
+    private int instCount = 0;
+    private Integer[] ensemblePerformance;
+    private Integer[] instPerEnsembleMember;
+    private int newLearnerPerformance = 0;
+    private int instForNewLearner = 0;
+    private Classifier newLearner;
+
     @Override
     public String getPurposeString() {
-        return "Incremental on-line bagging of Oza and Russell.";
+        return "Don't bother changing from Hoeffding Tree, it won't work";
     }
         
     private static final long serialVersionUID = 1L;
@@ -66,34 +75,106 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
             "Classifier to train.", Classifier.class, "trees.HoeffdingTree");
 
     public IntOption ensembleSizeOption = new IntOption("ensembleSize", 's',
-            "The number of models in the bag.", 10, 1, Integer.MAX_VALUE);
+            "The number of models in the bag.", numLearners, numLearners, numLearners);
 
     protected Classifier[] ensemble;
 
     @Override
     public void resetLearningImpl() {
+        System.out.println("resetLearningImpl");
         this.ensemble = new Classifier[this.ensembleSizeOption.getValue()];
+        this.ensemblePerformance = new Integer[ensemble.length];
+        this.instPerEnsembleMember = new Integer[ensemble.length];
         Classifier baseLearner = (Classifier) getPreparedClassOption(this.baseLearnerOption);
+//        Classifier baseLearner = (Classifier) getPreparedClassOption(new ClassOption("baseLearner", 'l', "Classifier to train.", Classifier.class, "trees.HoeffdingTree"));
         baseLearner.resetLearning();
         for (int i = 0; i < this.ensemble.length; i++) {
             this.ensemble[i] = baseLearner.copy();
+            this.ensemblePerformance[i] = 0;
+            this.instPerEnsembleMember[i] = 0;
         }
+//        System.out.println(this.ensemble.length);
+//        System.out.println(this.classifierRandom);
     }
 
     @Override
     public void trainOnInstanceImpl(Instance inst) {
+//        System.out.println("trainOnInstanceImpl");
+//        for (int i = 0; i < this.ensemble.length; i++) {
+//            int k = MiscUtils.poisson(1.0, this.classifierRandom);
+//            if (k > 0) {
+//                Instance weightedInst = (Instance) inst.copy();
+//                weightedInst.setWeight(inst.weight() * k);
+//                this.ensemble[i].trainOnInstance(weightedInst);
+//            }
+//        }
+//        count++;
+//        System.out.println(count);
+
+//        System.out.println(inst.classValue());
+        // New Learner every [Window Size] number of instances
+        if (windowCount == 0){
+            this.newLearner = ((Classifier) getPreparedClassOption(this.baseLearnerOption)).copy();
+            newLearnerPerformance = 0;
+            instForNewLearner = 0;
+        }
+        // Train all the current ensembles
         for (int i = 0; i < this.ensemble.length; i++) {
             int k = MiscUtils.poisson(1.0, this.classifierRandom);
             if (k > 0) {
                 Instance weightedInst = (Instance) inst.copy();
                 weightedInst.setWeight(inst.weight() * k);
                 this.ensemble[i].trainOnInstance(weightedInst);
+//                this.ensemblePerformance[i] += this.ensemble[i].getVotesForInstance(inst)[0];
+
+                if (windowCount == 0) {
+//                    double[] d = this.ensemble[i].getVotesForInstance(inst);
+//                    double max = 0;
+//                    int pred = -1;
+//                    for (int mc = 0; mc < d.length; mc++) {
+//                        if (d[mc] > max) {
+//                            max = d[mc];
+//                            pred = mc;
+//                        }
+//                    }
+//                    System.out.println("pred:" + pred + " max:" + max);
+//                    int classVal = (int)inst.classValue();
+//                    int correctPred = (pred == classVal) ? 1 : 0;
+//                    System.out.println(correctPred);
+//                    ensemblePerformance[i] += correctPred;
+                    this.ensemblePerformance[i] += checkClassifierPrediction(this.ensemble[i], inst);
+                    this.instPerEnsembleMember[i]++;
+                }
+//                System.out.println(this.ensemble[i].getVotesForInstance(inst));
             }
+        }
+        // Train the learner on the instance
+        int k = MiscUtils.poisson(1.0, this.classifierRandom);
+        if (k > 0) {
+            Instance weightedInst = (Instance) inst.copy();
+            weightedInst.setWeight(inst.weight() * k);
+            this.newLearner.trainOnInstance(weightedInst);
+            if (windowCount == 0) {
+                newLearnerPerformance += checkClassifierPrediction(this.newLearner, inst);
+                instForNewLearner++;
+            }
+        }
+        this.windowCount++;
+        this.instCount++;
+        // Replace a learner in the ensemble with the New Learner or ignore New Learner
+        // Reset the count so that a brand new learner is used for the next window size worth of instances
+        int removedMember = 0;
+        if (this.windowCount >= this.windowSize){
+            this.ensemble[removedMember] = this.newLearner;
+            this.ensemblePerformance[removedMember] = newLearnerPerformance;
+            this.instPerEnsembleMember[removedMember] = instForNewLearner;
+            this.windowCount = 0;
         }
     }
 
     @Override
     public double[] getVotesForInstance(Instance inst) {
+//        System.out.println("getVotesForInstance");
         DoubleVector combinedVote = new DoubleVector();
         for (int i = 0; i < this.ensemble.length; i++) {
             DoubleVector vote = new DoubleVector(this.ensemble[i].getVotesForInstance(inst));
@@ -121,16 +202,33 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
                     this.ensemble != null ? this.ensemble.length : 0)};
     }
 
-    @Override
-    public Classifier[] getSubClassifiers() {
-        return this.ensemble.clone();
+    private int checkClassifierPrediction(Classifier classifier, Instance instance) {
+        double[] d = classifier.getVotesForInstance(instance);
+        double max = 0;
+        int pred = -1;
+        for (int mc = 0; mc < d.length; mc++) {
+            if (d[mc] > max) {
+                max = d[mc];
+                pred = mc;
+            }
+        }
+//        System.out.println("pred:" + pred + " max:" + max);
+        int classVal = (int)instance.classValue();
+        int correctPred = (pred == classVal) ? 1 : 0;
+//        System.out.println(correctPred);
+        return correctPred;
     }
 
-    @Override
-    public ImmutableCapabilities defineImmutableCapabilities() {
-        if (this.getClass() == TheEnsemble.class)
-            return new ImmutableCapabilities(Capability.VIEW_STANDARD, Capability.VIEW_LITE);
-        else
-            return new ImmutableCapabilities(Capability.VIEW_STANDARD);
-    }
+//    @Override
+//    public Classifier[] getSubClassifiers() {
+//        return this.ensemble.clone();
+//    }
+//
+//    @Override
+//    public ImmutableCapabilities defineImmutableCapabilities() {
+//        if (this.getClass() == TheEnsemble.class)
+//            return new ImmutableCapabilities(Capability.VIEW_STANDARD, Capability.VIEW_LITE);
+//        else
+//            return new ImmutableCapabilities(Capability.VIEW_STANDARD);
+//    }
 }
