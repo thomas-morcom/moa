@@ -109,10 +109,8 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
                 Instance weightedInst = (Instance) inst.copy();
                 weightedInst.setWeight(inst.weight() * k);
                 this.ensemble[i].trainOnInstance(weightedInst);
-                if (windowCount == 0) {
-                    this.ensemblePerformance[i] += checkClassifierPrediction(this.ensemble[i], inst);
-                    this.instPerEnsembleMember[i]++;
-                }
+                this.ensemblePerformance[i] += checkClassifierPrediction(this.ensemble[i], inst);
+                this.instPerEnsembleMember[i]++;
             }
         }
         // Train the learner on the instance
@@ -121,20 +119,32 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
             Instance weightedInst = (Instance) inst.copy();
             weightedInst.setWeight(inst.weight() * k);
             this.newLearner.trainOnInstance(weightedInst);
-            if (windowCount == 0) {
-                newLearnerPerformance += checkClassifierPrediction(this.newLearner, inst);
-                instForNewLearner++;
-            }
+            this.newLearnerPerformance += checkClassifierPrediction(this.newLearner, inst);
+            this.instForNewLearner++;
         }
         this.windowCount++;
         this.instCount++;
         // Replace a learner in the ensemble with the New Learner or ignore New Learner
         // Reset the count so that a brand new learner is used for the next window size worth of instances
-        int removedMember = 0;
         if (this.windowCount >= this.windowSize){
-            this.ensemble[removedMember] = this.newLearner;
-            this.ensemblePerformance[removedMember] = newLearnerPerformance;
-            this.instPerEnsembleMember[removedMember] = instForNewLearner;
+            int removedMember = 0;
+            // Start the worst prediction off with the new learner so that if it changes then I know there is a worse member
+            int newLearnerPred = newLearnerPerformance/instForNewLearner;
+            int worstPred = newLearnerPred;
+            int currPred = 0;
+            for (int i = 0; i < this.ensemblePerformance.length; i++) {
+                currPred = this.ensemblePerformance[i]/this.instPerEnsembleMember[i];
+                if (currPred < worstPred) {
+                    worstPred = currPred;
+                    removedMember = i;
+                }
+            }
+            if (worstPred != currPred) {
+                System.out.println("replaced a member");
+                this.ensemble[removedMember] = this.newLearner;
+                this.ensemblePerformance[removedMember] = newLearnerPerformance;
+                this.instPerEnsembleMember[removedMember] = instForNewLearner;
+            }
             this.windowCount = 0;
         }
     }
