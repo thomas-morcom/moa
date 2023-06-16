@@ -86,32 +86,16 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
         this.ensemblePerformance = new Integer[ensemble.length];
         this.instPerEnsembleMember = new Integer[ensemble.length];
         Classifier baseLearner = (Classifier) getPreparedClassOption(this.baseLearnerOption);
-//        Classifier baseLearner = (Classifier) getPreparedClassOption(new ClassOption("baseLearner", 'l', "Classifier to train.", Classifier.class, "trees.HoeffdingTree"));
         baseLearner.resetLearning();
         for (int i = 0; i < this.ensemble.length; i++) {
             this.ensemble[i] = baseLearner.copy();
             this.ensemblePerformance[i] = 0;
             this.instPerEnsembleMember[i] = 0;
         }
-//        System.out.println(this.ensemble.length);
-//        System.out.println(this.classifierRandom);
     }
 
     @Override
     public void trainOnInstanceImpl(Instance inst) {
-//        System.out.println("trainOnInstanceImpl");
-//        for (int i = 0; i < this.ensemble.length; i++) {
-//            int k = MiscUtils.poisson(1.0, this.classifierRandom);
-//            if (k > 0) {
-//                Instance weightedInst = (Instance) inst.copy();
-//                weightedInst.setWeight(inst.weight() * k);
-//                this.ensemble[i].trainOnInstance(weightedInst);
-//            }
-//        }
-//        count++;
-//        System.out.println(count);
-
-//        System.out.println(inst.classValue());
         // New Learner every [Window Size] number of instances
         if (windowCount == 0){
             this.newLearner = ((Classifier) getPreparedClassOption(this.baseLearnerOption)).copy();
@@ -125,27 +109,10 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
                 Instance weightedInst = (Instance) inst.copy();
                 weightedInst.setWeight(inst.weight() * k);
                 this.ensemble[i].trainOnInstance(weightedInst);
-//                this.ensemblePerformance[i] += this.ensemble[i].getVotesForInstance(inst)[0];
-
                 if (windowCount == 0) {
-//                    double[] d = this.ensemble[i].getVotesForInstance(inst);
-//                    double max = 0;
-//                    int pred = -1;
-//                    for (int mc = 0; mc < d.length; mc++) {
-//                        if (d[mc] > max) {
-//                            max = d[mc];
-//                            pred = mc;
-//                        }
-//                    }
-//                    System.out.println("pred:" + pred + " max:" + max);
-//                    int classVal = (int)inst.classValue();
-//                    int correctPred = (pred == classVal) ? 1 : 0;
-//                    System.out.println(correctPred);
-//                    ensemblePerformance[i] += correctPred;
                     this.ensemblePerformance[i] += checkClassifierPrediction(this.ensemble[i], inst);
                     this.instPerEnsembleMember[i]++;
                 }
-//                System.out.println(this.ensemble[i].getVotesForInstance(inst));
             }
         }
         // Train the learner on the instance
@@ -174,7 +141,6 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
 
     @Override
     public double[] getVotesForInstance(Instance inst) {
-//        System.out.println("getVotesForInstance");
         DoubleVector combinedVote = new DoubleVector();
         for (int i = 0; i < this.ensemble.length; i++) {
             DoubleVector vote = new DoubleVector(this.ensemble[i].getVotesForInstance(inst));
