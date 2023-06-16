@@ -129,22 +129,25 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
         if (this.windowCount >= this.windowSize){
             int removedMember = 0;
             // Start the worst prediction off with the new learner so that if it changes then I know there is a worse member
-            int newLearnerPred = newLearnerPerformance/instForNewLearner;
-            int worstPred = newLearnerPred;
-            int currPred = 0;
+            double newLearnerPred = (double)newLearnerPerformance/instForNewLearner;
+            double worstPred = newLearnerPred;
+            double currPred = 0;
             for (int i = 0; i < this.ensemblePerformance.length; i++) {
-                currPred = this.ensemblePerformance[i]/this.instPerEnsembleMember[i];
+                currPred = (double) this.ensemblePerformance[i]/this.instPerEnsembleMember[i];
                 if (currPred < worstPred) {
                     worstPred = currPred;
                     removedMember = i;
                 }
             }
-            if (worstPred != currPred) {
-                System.out.println("replaced a member");
+            if (worstPred < currPred) {
+//                System.out.println("replacing member " + removedMember);
                 this.ensemble[removedMember] = this.newLearner;
                 this.ensemblePerformance[removedMember] = newLearnerPerformance;
                 this.instPerEnsembleMember[removedMember] = instForNewLearner;
             }
+//            else {
+//                System.out.println("worst Pred:" + worstPred + "  new Pred:" + newLearnerPred);
+//            }
             this.windowCount = 0;
         }
     }
