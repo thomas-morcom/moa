@@ -164,14 +164,14 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
                 for (int v = 0; v < votes.length; v++){
                     System.out.print(votes[v] + " ");
                 }
+                System.out.println(" Length:" + votes.length);
             }
         }
-        System.out.println();
         double[] returned = combinedVote.getArrayRef();
         for (int r = 0; r < returned.length; r++) {
             System.out.print(returned[r] + " ");
         }
-        System.out.println(" Length:" + returned.length);
+        System.out.println(" Returned Length:" + returned.length);
         return combinedVote.getArrayRef();
     }
 
