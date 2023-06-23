@@ -109,7 +109,9 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
                 Instance weightedInst = (Instance) inst.copy();
                 weightedInst.setWeight(inst.weight() * k);
                 this.ensemble[i].trainOnInstance(weightedInst);
-                this.ensemblePerformance[i] += checkClassifierPrediction(this.ensemble[i], inst);
+                if(this.ensemble[i].correctlyClassifies(inst)){
+                    this.ensemblePerformance[i]++;
+                }
                 this.instPerEnsembleMember[i]++;
             }
         }
@@ -119,7 +121,9 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
             Instance weightedInst = (Instance) inst.copy();
             weightedInst.setWeight(inst.weight() * k);
             this.newLearner.trainOnInstance(weightedInst);
-            this.newLearnerPerformance += checkClassifierPrediction(this.newLearner, inst);
+            if (this.newLearner.correctlyClassifies(inst)) {
+                this.newLearnerPerformance++;
+            }
             this.instForNewLearner++;
         }
         this.windowCount++;
@@ -127,27 +131,7 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
         // Replace a learner in the ensemble with the New Learner or ignore New Learner
         // Reset the count so that a brand new learner is used for the next window size worth of instances
         if (this.windowCount >= this.windowSize){
-            int removedMember = 0;
-            // Start the worst prediction off with the new learner so that if it changes then I know there is a worse member
-            double newLearnerPred = (double)newLearnerPerformance/instForNewLearner;
-            double worstPred = newLearnerPred;
-            double currPred = 0;
-            for (int i = 0; i < this.ensemblePerformance.length; i++) {
-                currPred = (double) this.ensemblePerformance[i]/this.instPerEnsembleMember[i];
-                if (currPred < worstPred) {
-                    worstPred = currPred;
-                    removedMember = i;
-                }
-            }
-            if (worstPred < currPred) {
-//                System.out.println("replacing member " + removedMember);
-                this.ensemble[removedMember] = this.newLearner;
-                this.ensemblePerformance[removedMember] = newLearnerPerformance;
-                this.instPerEnsembleMember[removedMember] = instForNewLearner;
-            }
-//            else {
-//                System.out.println("worst Pred:" + worstPred + "  new Pred:" + newLearnerPred);
-//            }
+            replaceWorstClassifier();
             this.windowCount = 0;
         }
     }
@@ -158,20 +142,18 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
         for (int i = 0; i < this.ensemble.length; i++) {
             DoubleVector vote = new DoubleVector(this.ensemble[i].getVotesForInstance(inst));
             if (vote.sumOfValues() > 0.0) {
-                vote.normalize();
-                combinedVote.addValues(vote);
                 double[] votes = this.ensemble[i].getVotesForInstance(inst);
+                double max = 0.0;
+                int maxIndex = 0;
                 for (int v = 0; v < votes.length; v++){
-                    System.out.print(votes[v] + " ");
+                    if (max < votes[v]) {
+                        max = votes[v];
+                        maxIndex = v;
+                    }
                 }
-                System.out.println(" Length:" + votes.length);
+                combinedVote.addValues(new DoubleVector(createVote(maxIndex, votes.length, i)));
             }
         }
-        double[] returned = combinedVote.getArrayRef();
-        for (int r = 0; r < returned.length; r++) {
-            System.out.print(returned[r] + " ");
-        }
-        System.out.println(" Returned Length:" + returned.length);
         return combinedVote.getArrayRef();
     }
 
@@ -191,21 +173,35 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
                     this.ensemble != null ? this.ensemble.length : 0)};
     }
 
-    private int checkClassifierPrediction(Classifier classifier, Instance instance) {
-        double[] d = classifier.getVotesForInstance(instance);
-        double max = 0;
-        int pred = -1;
-        for (int mc = 0; mc < d.length; mc++) {
-            if (d[mc] > max) {
-                max = d[mc];
-                pred = mc;
+    private void replaceWorstClassifier () {
+        int removedMember = 0;
+        // Start the worst prediction off with the new learner so that if it changes then I know there is a worse member
+        double worstPred = (double)this.newLearnerPerformance/this.instForNewLearner;
+        double currPred = 0;
+        for (int i = 0; i < this.ensemblePerformance.length; i++) {
+            currPred = (double) this.ensemblePerformance[i]/this.instPerEnsembleMember[i];
+            if (currPred < worstPred) {
+                worstPred = currPred;
+                removedMember = i;
             }
         }
-//        System.out.println("pred:" + pred + " max:" + max);
-        int classVal = (int)instance.classValue();
-        int correctPred = (pred == classVal) ? 1 : 0;
-//        System.out.println(correctPred);
-        return correctPred;
+        if (worstPred < currPred) {
+            this.ensemble[removedMember] = this.newLearner;
+            this.ensemblePerformance[removedMember] = newLearnerPerformance;
+            this.instPerEnsembleMember[removedMember] = instForNewLearner;
+        }
+    }
+
+    private double[] createVote(int index, int length, int ensemble) {
+        double[] vote = new double[length];
+        for (int i = 0; i < length; i++){
+            if (i == index){
+                vote[i] = this.ensemblePerformance[ensemble];
+            } else {
+                vote[i] = 0.0;
+            }
+        }
+        return vote;
     }
 
 //    @Override
