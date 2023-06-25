@@ -112,13 +112,6 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
         // New Learner every [Window Size] number of instances
         if (windowCount == 0){
             this.newLearner = ((Classifier) getPreparedClassOption(this.baseLearnerOption)).copy();
-//            HoeffdingTree ht = new HoeffdingTree();
-//            ht.gracePeriodOption.setValue(10);
-//            ht.splitConfidenceOption.setValue(0.05);
-//            ht.tieThresholdOption.setValue(0.1);
-//            ht.trainOnInstance(inst);
-//            this.newLearner = (Classifier) new HoeffdingTree();
-//            ((HoeffdingTree) this.newLearner).gracePeriodOption.setValue(10);
             induceDiversity();
             newLearnerPerformance = 0;
             instForNewLearner = 0;
@@ -194,7 +187,6 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
     }
 
     private void induceDiversity () {
-//        System.out.println("GP[last]" + gracePeriod[20] + "GP Length:" + gracePeriod.length);
         ((HoeffdingTree) this.newLearner).gracePeriodOption.setValue(gracePeriod[rand.nextInt(20)]);
         ((HoeffdingTree) this.newLearner).splitConfidenceOption.setValue(splitConfidence[rand.nextInt(20)]);
         ((HoeffdingTree) this.newLearner).tieThresholdOption.setValue(tieThreshold[rand.nextInt(20)]);
