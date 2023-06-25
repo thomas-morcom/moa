@@ -25,10 +25,13 @@ import moa.capabilities.CapabilitiesHandler;
 import moa.classifiers.AbstractClassifier;
 import moa.classifiers.Classifier;
 import moa.classifiers.MultiClassClassifier;
+import moa.classifiers.trees.HoeffdingTree;
 import moa.core.DoubleVector;
 import moa.core.Measurement;
 import moa.core.MiscUtils;
 import moa.options.ClassOption;
+
+import java.util.Random;
 
 /**
  * Incremental on-line bagging of Oza and Russell.
@@ -55,14 +58,20 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
 
     private int numLearners = 10;
 
-    private int windowSize = 1000;
+//    private int windowSize = 1000;
     private int windowCount = 0;
-    private int instCount = 0;
     private Integer[] ensemblePerformance;
     private Integer[] instPerEnsembleMember;
     private int newLearnerPerformance = 0;
     private int instForNewLearner = 0;
+    private Random rand = new Random();
+    //    private Integer[] gracePeriod = new Integer[21];
+        private Integer[] gracePeriod = {10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200};
+//    private double[] splitConfidence = new double[21];
+    private double[] splitConfidence = {0.0,0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1.00};
     private Classifier newLearner;
+//    private double[] tieThreshold = new double[21];
+    private double[] tieThreshold = {0.0,0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1.00};
 
     @Override
     public String getPurposeString() {
@@ -76,6 +85,9 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
 
     public IntOption ensembleSizeOption = new IntOption("ensembleSize", 's',
             "The number of models in the bag.", numLearners, numLearners, numLearners);
+
+
+    public IntOption windowSize = new IntOption( "limit", 'w', "The maximum number of instances to store", 1000, 1, Integer.MAX_VALUE);
 
     protected Classifier[] ensemble;
 
@@ -96,9 +108,18 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
 
     @Override
     public void trainOnInstanceImpl(Instance inst) {
+
         // New Learner every [Window Size] number of instances
         if (windowCount == 0){
             this.newLearner = ((Classifier) getPreparedClassOption(this.baseLearnerOption)).copy();
+//            HoeffdingTree ht = new HoeffdingTree();
+//            ht.gracePeriodOption.setValue(10);
+//            ht.splitConfidenceOption.setValue(0.05);
+//            ht.tieThresholdOption.setValue(0.1);
+//            ht.trainOnInstance(inst);
+//            this.newLearner = (Classifier) new HoeffdingTree();
+//            ((HoeffdingTree) this.newLearner).gracePeriodOption.setValue(10);
+            induceDiversity();
             newLearnerPerformance = 0;
             instForNewLearner = 0;
         }
@@ -127,10 +148,9 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
             this.instForNewLearner++;
         }
         this.windowCount++;
-        this.instCount++;
         // Replace a learner in the ensemble with the New Learner or ignore New Learner
         // Reset the count so that a brand new learner is used for the next window size worth of instances
-        if (this.windowCount >= this.windowSize){
+        if (this.windowCount >= this.windowSize.getValue()){
             replaceWorstClassifier();
             this.windowCount = 0;
         }
@@ -171,6 +191,13 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
     protected Measurement[] getModelMeasurementsImpl() {
         return new Measurement[]{new Measurement("ensemble size",
                     this.ensemble != null ? this.ensemble.length : 0)};
+    }
+
+    private void induceDiversity () {
+//        System.out.println("GP[last]" + gracePeriod[20] + "GP Length:" + gracePeriod.length);
+        ((HoeffdingTree) this.newLearner).gracePeriodOption.setValue(gracePeriod[rand.nextInt(20)]);
+        ((HoeffdingTree) this.newLearner).splitConfidenceOption.setValue(splitConfidence[rand.nextInt(20)]);
+        ((HoeffdingTree) this.newLearner).tieThresholdOption.setValue(tieThreshold[rand.nextInt(20)]);
     }
 
     private void replaceWorstClassifier () {
