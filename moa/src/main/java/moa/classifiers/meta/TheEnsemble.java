@@ -15,7 +15,7 @@
  *
  *    You should have received a copy of the GNU General Public License
  *    along with this program. If not, see <http://www.gnu.org/licenses/>.
- *    
+ *
  */
 package moa.classifiers.meta;
 
@@ -56,44 +56,39 @@ import java.util.Random;
 public class TheEnsemble extends AbstractClassifier implements MultiClassClassifier,
                                                           CapabilitiesHandler {
 
-    private int numLearners = 10;
-
-//    private int windowSize = 1000;
     private int windowCount = 0;
     private Integer[] ensemblePerformance;
     private Integer[] instPerEnsembleMember;
     private int newLearnerPerformance = 0;
     private int instForNewLearner = 0;
-    private Random rand = new Random();
-    //    private Integer[] gracePeriod = new Integer[21];
-        private Integer[] gracePeriod = {10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200};
-//    private double[] splitConfidence = new double[21];
+    private Integer[] gracePeriod = {10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200};
     private double[] splitConfidence = {0.0,0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1.00};
-    private Classifier newLearner;
-//    private double[] tieThreshold = new double[21];
     private double[] tieThreshold = {0.0,0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1.00};
+    private Classifier newLearner;
 
     @Override
     public String getPurposeString() {
         return "Don't bother changing from Hoeffding Tree, it won't work";
     }
-        
+
     private static final long serialVersionUID = 1L;
 
     public ClassOption baseLearnerOption = new ClassOption("baseLearner", 'l',
             "Classifier to train.", Classifier.class, "trees.HoeffdingTree");
 
     public IntOption ensembleSizeOption = new IntOption("ensembleSize", 's',
-            "The number of models in the bag.", numLearners, numLearners, numLearners);
-
+            "The number of models in the bag.", 10, 1, 100);
 
     public IntOption windowSize = new IntOption( "limit", 'w', "The maximum number of instances to store", 1000, 1, Integer.MAX_VALUE);
+
+    public IntOption randomSeedOption = new IntOption("randomSeed", 'r',
+            "Set the random seed.", 10, 1, 100);
 
     protected Classifier[] ensemble;
 
     @Override
     public void resetLearningImpl() {
-        System.out.println("resetLearningImpl");
+        this.classifierRandom.setSeed(randomSeedOption.getValue());
         this.ensemble = new Classifier[this.ensembleSizeOption.getValue()];
         this.ensemblePerformance = new Integer[ensemble.length];
         this.instPerEnsembleMember = new Integer[ensemble.length];
@@ -152,18 +147,23 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
     @Override
     public double[] getVotesForInstance(Instance inst) {
         DoubleVector combinedVote = new DoubleVector();
+        double[] votes;
+        double max = 0.0;
+        int maxIndex = 0;
+        double sum = 0.0;
         for (int i = 0; i < this.ensemble.length; i++) {
-            DoubleVector vote = new DoubleVector(this.ensemble[i].getVotesForInstance(inst));
-            if (vote.sumOfValues() > 0.0) {
-                double[] votes = this.ensemble[i].getVotesForInstance(inst);
-                double max = 0.0;
-                int maxIndex = 0;
-                for (int v = 0; v < votes.length; v++){
-                    if (max < votes[v]) {
-                        max = votes[v];
-                        maxIndex = v;
-                    }
+            votes = this.ensemble[i].getVotesForInstance(inst);
+            max = 0.0;
+            maxIndex = 0;
+            sum = 0.0;
+            for (int v = 0; v < votes.length; v++){
+                sum += votes[v];
+                if (max < votes[v]) {
+                    max = votes[v];
+                    maxIndex = v;
                 }
+            }
+            if (sum > 0.0){
                 combinedVote.addValues(new DoubleVector(createVote(maxIndex, votes.length, i)));
             }
         }
@@ -187,9 +187,9 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
     }
 
     private void induceDiversity () {
-        ((HoeffdingTree) this.newLearner).gracePeriodOption.setValue(gracePeriod[rand.nextInt(20)]);
-        ((HoeffdingTree) this.newLearner).splitConfidenceOption.setValue(splitConfidence[rand.nextInt(20)]);
-        ((HoeffdingTree) this.newLearner).tieThresholdOption.setValue(tieThreshold[rand.nextInt(20)]);
+        ((HoeffdingTree) this.newLearner).gracePeriodOption.setValue(gracePeriod[this.classifierRandom.nextInt(20)]);
+        ((HoeffdingTree) this.newLearner).splitConfidenceOption.setValue(splitConfidence[this.classifierRandom.nextInt(20)]);
+        ((HoeffdingTree) this.newLearner).tieThresholdOption.setValue(tieThreshold[this.classifierRandom.nextInt(20)]);
     }
 
     private void replaceWorstClassifier () {
@@ -222,17 +222,4 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
         }
         return vote;
     }
-
-//    @Override
-//    public Classifier[] getSubClassifiers() {
-//        return this.ensemble.clone();
-//    }
-//
-//    @Override
-//    public ImmutableCapabilities defineImmutableCapabilities() {
-//        if (this.getClass() == TheEnsemble.class)
-//            return new ImmutableCapabilities(Capability.VIEW_STANDARD, Capability.VIEW_LITE);
-//        else
-//            return new ImmutableCapabilities(Capability.VIEW_STANDARD);
-//    }
 }
