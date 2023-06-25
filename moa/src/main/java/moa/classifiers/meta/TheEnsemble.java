@@ -82,7 +82,7 @@ public class TheEnsemble extends AbstractClassifier implements MultiClassClassif
     public IntOption windowSize = new IntOption( "limit", 'w', "The maximum number of instances to store", 1000, 1, Integer.MAX_VALUE);
 
     public IntOption randomSeedOption = new IntOption("randomSeed", 'r',
-            "Set the random seed.", 10, 1, 100);
+            "Set the random seed.", 1, 1, Integer.MAX_VALUE);
 
     protected Classifier[] ensemble;
 
